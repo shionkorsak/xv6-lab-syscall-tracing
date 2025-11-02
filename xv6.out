@@ -1,0 +1,24 @@
+
+xv6 kernel is booting
+
+hart 2 starting
+hart 1 starting
+init: starting sh
+$ strace mkdir 9JJuifc1
+[pid 4] strace(4) = 0
+[pid 4] exec("mkdir") = 2
+[pid 4] mkdir("9JJuifc1") = 0
+$ strace echo > 9JJuifc1/sJ2K7kN6
+[pid 6] getpid(0) = 6
+[pid 6] strace(6) = 0
+[pid 6] exec("echo") = 1
+$ strace mkdir 9JJuifc1/HrKlVOkM
+[pid 8] getpid(0) = 8
+[pid 8] strace(8) = 0
+[pid 8] exec("mkdir") = 2
+[pid 8] mkdir("9JJuifc1/HrKlVOkM") = 0
+$ strace echo > 9JJuifc1/HrKlVOkM/sJ2K7kN6
+[pid 10] getpid(0) = 10
+[pid 10] strace(10) = 0
+[pid 10] exec("echo") = 1
+$ qemu-system-riscv64: terminating on signal 15 from pid 1463 (make)

@@ -695,4 +695,12 @@ procdump(void)
   }
 }
 
-
+struct proc* find_proc_by_pid(int pid) {
+  struct proc* now_proc;
+  for (now_proc = proc; now_proc<&proc[NPROC];now_proc++){
+    if(now_proc->pid == pid){
+      return now_proc;
+    }
+  }
+  return NULL;
+}

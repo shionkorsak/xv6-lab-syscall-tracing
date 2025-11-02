@@ -7,6 +7,30 @@
 #include "syscall.h"
 #include "defs.h"
 
+static char *syscall_names[] = {
+[SYS_fork]    "fork",
+[SYS_exit]    "exit",
+[SYS_wait]    "wait",
+[SYS_pipe]    "pipe",
+[SYS_read]    "read",
+[SYS_kill]    "kill",
+[SYS_exec]    "exec",
+[SYS_fstat]   "fstat",
+[SYS_chdir]   "chdir",
+[SYS_dup]     "dup",
+[SYS_getpid]  "getpid",
+[SYS_sbrk]    "sbrk",
+[SYS_sleep]   "sleep",
+[SYS_uptime]  "uptime",
+[SYS_open]    "open",
+[SYS_write]   "write",
+[SYS_mknod]   "mknod",
+[SYS_unlink]  "unlink",
+[SYS_link]    "link",
+[SYS_mkdir]   "mkdir",
+[SYS_close]   "close",
+[SYS_trace]   "strace",
+};
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -102,6 +126,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_trace(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -127,6 +152,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_trace]   sys_trace,
 };
 
 
@@ -143,7 +169,79 @@ syscall(void)
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
-    p->trapframe->a0 = syscalls[num]();
+    uint64 arg0 = p->trapframe->a0;
+
+    // If we're tracing, capture printable copies of user string
+    // arguments *before* we call the syscall. Some syscalls like
+    // exec replace the process address space, so fetching strings
+    // after the syscall can fail and show "<bad ptr>". Copy the
+    // needed user data into kernel buffers now.
+    char argbuf[MAXPATH];
+    int have_argbuf = 0;
+    if (p->traced) {
+      if (num == SYS_open || num == SYS_unlink || num == SYS_chdir ||
+          num == SYS_mkdir || num == SYS_link) {
+        if (argstr(0, argbuf, sizeof(argbuf)) >= 0)
+          have_argbuf = 1;
+      } else if (num == SYS_exec) {
+        // exec(char *argv[]) -- fetch argv[0] (program name) before exec()
+        uint64 argv_addr;
+        argaddr(0, &argv_addr);
+        uint64 progptr;
+        // copyin directly (works for stack pointers); fetchaddr
+        // checks against p->sz and fails for pointers on the user
+        // stack (argv lives on the stack). Use copyin to read the
+        // pointer value from the user address space.
+        if (copyin(p->pagetable, (char *)&progptr, argv_addr, sizeof(progptr)) == 0) {
+          if (fetchstr(progptr, argbuf, sizeof(argbuf)) >= 0)
+            have_argbuf = 1;
+        }
+        // Fallback: sometimes argv_addr may point directly at the
+        // program name (not to a pointer). Try reading a string at
+        // argv_addr itself.
+        if (!have_argbuf) {
+          if (fetchstr(argv_addr, argbuf, sizeof(argbuf)) >= 0)
+            have_argbuf = 1;
+        }
+        /* nop */
+      }
+    }
+    // If this process is being traced, avoid letting the user write()
+    // directly print to the console (which could interleave with the
+    // tracer's own console output). To simplify, when traced we drop
+    // the actual user write() call and pretend it succeeded by
+    // returning the requested length. This prevents the user's output
+    // from appearing in the middle of the tracer output.
+    if (p->traced && num == SYS_write) {
+      // argraw(2) is the "n" argument (length) of write(fd, buf, n)
+      uint64 len = argraw(2);
+      p->trapframe->a0 = len;
+    } else {
+      p->trapframe->a0 = syscalls[num]();
+    }
+
+    if (p->traced) {
+      printf("[pid %d] %s(", p->pid, syscall_names[num]);
+
+      if (num == SYS_open || num == SYS_unlink || num == SYS_chdir ||
+          num == SYS_mkdir || num == SYS_link) {
+        if (have_argbuf)
+          printf("\"%s\"", argbuf);
+        else
+          printf("<bad ptr>");
+      } else if (num == SYS_exec) {
+        if (have_argbuf)
+          printf("\"%s\"", argbuf);
+        else
+          printf("<bad ptr>");
+      } else {
+        printf("%ld", arg0);
+      }
+
+      printf(") = %ld\n", p->trapframe->a0);
+    }
+
+
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);

@@ -42,3 +42,6 @@ void *memcpy(void *, const void *, uint);
 // umalloc.c
 void* malloc(uint);
 void free(void*);
+
+// new for lab
+int trace(int pid);

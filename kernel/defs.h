@@ -9,6 +9,10 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -188,3 +192,6 @@ void            virtio_disk_intr(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+// new for the lab
+struct proc* find_proc_by_pid(int pid);
